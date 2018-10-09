@@ -32,7 +32,6 @@ proc lexBrainFuck(
         stream: Stream,
         jmpTargets: var seq[int]
         ) =
-  # We use the function call stack
   var startLoopPos: int
   var stack: seq[int]
 
