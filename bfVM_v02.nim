@@ -1,5 +1,5 @@
 # Brainfuck interpreter v2: storing jump targets ahead of time
-# This is actually 25% slower than v1
+# About 10% faster
 
 import streams, tables
 
@@ -23,14 +23,14 @@ type
     pc: int                     # Program counter: Address of the current instruction
     mem: seq[uint8]             # Memory
     I: int                      # Memory address register
-    jmpTargets: Table[int, int] # Jump targets
+    jmpTargets: seq[int]        # Jump targets
 
 const MemSize = 30000   # Initial memory of the VM
 
 proc lexBrainFuck(
         result: var seq[BfOpKind],
         stream: Stream,
-        jmpTargets: var Table[int, int]
+        jmpTargets: var seq[int]
         ) =
   # We use the function call stack
   var startLoopPos: int
@@ -46,17 +46,19 @@ proc lexBrainFuck(
     of ',': result.add opSTOR
     of '[':
       result.add opJZ
-      stack.add result.len
+      stack.add result.len    # In the loop due to `next` before vm.jmpTargets[vm.pc], we index with pc+1
     of ']':
-      result.add opBNZ
+      result.add opBNZ        # due to `next` we also index with pc+1
+
       let startLoop = stack.pop()
       let endLoop = result.len
-      jmpTargets.add startLoop, endLoop
-      jmpTargets.add endLoop, startLoop
+
+      jmpTargets.setLen(result.len + 1)
+      jmpTargets[startLoop] = endLoop
+      jmpTargets[endLoop] = startLoop
     else: discard
 
 proc initBrainfuckVM(stream: Stream): BrainfuckVM =
-  result.jmpTargets = initTable[int, int](initialSize = 16)
   lexBrainFuck(result.code, stream, result.jmpTargets)
   result.mem = newSeq[uint8](MemSize)
 
@@ -70,14 +72,14 @@ when defined(vmTrace):
   proc traceBefore(vm: BrainfuckVM) =
     # Need to be separated, the if/else interferes with computed goto labels
     if vm.pc < vm.code.len:
-      stdout.write &"\nBefore - pc: {vm.pc:>03}, op: {vm.code[vm.pc]:<6}, I: {vm.I:>04}, mem: {vm.mem[vm.I]:>03}"
+      stdout.write &"\nBefore - pc: {vm.pc:>03}, op: {vm.code[vm.pc]:<6}, I: {vm.I:>04}, mem: {vm.mem[vm.I]:>03}, jmpTarget: {vm.jmpTargets[vm.pc]:>03} "
     else:
       stdout.write "Before - No code left, end of execution"
 
   proc traceAfter(vm: BrainfuckVM) =
     # Need to be separated, the if/else interferes with computed goto labels
     if vm.pc < vm.code.len:
-      stdout.write &"-   After - pc: {vm.pc:>03}, op: {vm.code[vm.pc]:<6}, I: {vm.I:>04}, mem: {vm.mem[vm.I]:>03}"
+      stdout.write &"-   After - pc: {vm.pc:>03}, op: {vm.code[vm.pc]:<6}, I: {vm.I:>04}, mem: {vm.mem[vm.I]:>03}, jmpTarget: {vm.jmpTargets[vm.pc]:>03}"
     else:
       stdout.write "-   After - No code left, end of execution"
 
