@@ -206,16 +206,20 @@ func mov(reg: static range[rax..rdi], imm32: uint32): array[6, byte] =
   ## Move immediate 32-bit value into register
   # Note: we don't define imm16 moves as:
   #  - It only saves one byte as we would need the 0x66 16-bit mode prefix
-  #  - Partial register loads are slower and causes stalls (https://stackoverflow.com/questions/41573502/why-doesnt-gcc-use-partial-registers)
-  result[0]       = 0xC7 # Move imm16 or imm32 into r/m16 or r/m32
+  #  - Partial register loads cause stalls (https://stackoverflow.com/questions/41573502/why-doesnt-gcc-use-partial-registers)
+  #    because 8 and 16-bit immediate are not zero-extended into the register
+  #    so the CPU must assume dependency with the underlying larger register.
+  #    There is no penalties for loading 32-bit immediate into a 64-bit registers,
+  #    those are always zero-extended
+  result[0]       = 0xC7                        # Move imm into r/m
   result[1]       = modrm(Direct, reg, false)
   result[2 ..< 6] = cast[array[4, byte]](imm32) # We assume that imm32 is little-endian as we are jitting on x86
 
 func mov(dst, src: static range[rax..rdi]): array[3, byte] =
   ## Move 64-bit content from register to register
   result[0] = rex_prefix(w = true, r = false, x = false, b = false)
-  result[1] = 0x89 # Move reg16 or reg32 int r/m16 or r/m32. Need REX pefix for 64-bit mode.
-  result[2] = modrm(Direct, src, false, dst, false)
+  result[1] = 0x89                                  # Move reg into r/m
+  result[2] = modrm(Direct, reg = src, false, rm = dst, false)
 
 func lea(dst: static range[rax..rdi], src: static InstructionPointer, disp32: uint32): array[7, byte] =
   ## Load an effective address relative to the instruction pointer
@@ -224,9 +228,9 @@ func lea(dst: static range[rax..rdi], src: static InstructionPointer, disp32: ui
   # Even though its 64-bit only, if REX is not set and rip >= 2^32
   # only rip mod 2^32 will be loaded in the register,ed the extra byte for rex_prefix
   result[0]       = rex_prefix(w = true, r = false, x = false, b = false)
-  result[1]       = 0x8D
-  result[2]       = modrm(Indirect, dst, false, rbp, false) # To use rip, modrm requires passing "Indirect" (0b00) + RBP
-  result[3 ..< 7] = cast[array[4, byte]](disp32)            # We assume that imm32 is little-endian as we are jitting on x86
+  result[1]       = 0x8D                                               # Store address r/m in reg
+  result[2]       = modrm(Indirect, reg = dst, false, rm = rbp, false) # To use rip, modrm requires passing "Indirect" (0b00) + RBP
+  result[3 ..< 7] = cast[array[4, byte]](disp32)                       # We assume that disp32 is little-endian as we are jitting on x86
 
 func syscall(): array[2, byte] = [byte 0x0f, 0x05]
 func ret(): array[1, byte] = [byte 0xc3]
