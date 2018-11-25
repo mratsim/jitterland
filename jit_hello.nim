@@ -352,3 +352,20 @@ proc main() =
 when isMainModule:
   main()
 
+  # MemMapping constants success
+
+  # ## JIT code expected
+  # 55 48 89 e5
+  # c7 c0 04 00 00 02
+  # 48 8d 35 0d 00 00 00
+  # c7 c2 0c 00 00 00
+  # 0f 05
+  # c9
+  # c3
+  # 48 65 6c 6c 6f 20 57 6f 72 6c 64 21
+
+  # ## JIT code stored
+  # 50 57 52 56 c7 c0 04 00 00 02 c7 c7 01 00 00 00 48 8d 35 0d 00 00 00 c7 c2 0c 00 00 00 0f 05 5e 5a 5f 58 c3 48 65 6c 6c 6f 20 57 6f 72 6c 64 21
+
+  # ## JIT result
+  # Hello World!
