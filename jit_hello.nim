@@ -208,12 +208,11 @@ func modrm(adr_mode: AddressingMode, reg_ref: Reg, r: static bool, reg_rm: Reg, 
 # | scale |   index   |    base   |
 # +---+---+---+---+---+---+---+---+
 
-func mov(reg: static range[rax..rdi], imm32: uint32): array[7, byte] =
+func mov(reg: static range[rax..rdi], imm32: uint32): array[6, byte] =
   ## Move immediate 32-bit value into register
-  result[0]       = rex_prefix(w = true, r = false, x = false, b = false)
-  result[1]       = 0xC7
-  result[2]       = modrm(Direct, reg, false)
-  result[3 ..< 7] = cast[array[4, byte]](imm32) # We assume that imm32 is little-endian as we are jitting on x86
+  result[0]       = 0xC7
+  result[1]       = modrm(Direct, reg, false)
+  result[2 ..< 6] = cast[array[4, byte]](imm32) # We assume that imm32 is little-endian as we are jitting on x86
 
 func mov(dst, src: static range[rax..rdi]): array[3, byte] =
   ## Move 64-bit content from register to register
