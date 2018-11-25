@@ -215,6 +215,12 @@ func mov(reg: static range[rax..rdi], imm32: uint32): array[7, byte] =
   result[2]       = modrm(Direct, reg, false)
   result[3 ..< 7] = cast[array[4, byte]](imm32) # We assume that imm32 is little-endian as we are jitting on x86
 
+func mov(dst, src: static range[rax..rdi]): array[3, byte] =
+  ## Move 64-bit content from register to register
+  result[0] = rex_prefix(w = true, r = false, x = false, b = false)
+  result[1] = 0x89
+  result[2] = modrm(Direct, src, false, dst, false)
+
 func lea(dst: static range[rax..rdi], src: static InstructionPointer, disp32: uint32): array[7, byte] =
   ## Load an effective address relative to the instruction pointer
   ## Effective address = Current instruction + 32-bit displacement
@@ -225,6 +231,27 @@ func lea(dst: static range[rax..rdi], src: static InstructionPointer, disp32: ui
 
 func syscall(): array[2, byte] = [byte 0x0f, 0x05]
 func ret(): array[1, byte] = [byte 0xc3]
+
+# TODO: clobbered register autodetection
+func push(reg: static range[rax..rdi]): array[1, byte] =
+  ## Push a register on the stack
+  result[0] = 0x50.byte or reg.byte
+
+func pop(reg: static range[rax..rdi]): array[1, byte] =
+  ## Pop the stack into a register
+  result[0] = 0x58.byte or reg.byte
+
+func pushStackFrame(): array[4, byte] =
+  result[0]      = push(rbp)[0]
+  result[1 .. 3] = mov(rbp, rsp)
+
+func popStackFrame(): array[1, byte] =
+  # TODO optimization if rsp == rbp
+  # Leave is equivalent to (Intel syntax - mov dst, src)
+  # - mov rbp, rsp
+  # - pop rbp
+  # If rsp == rbp, we can just pop rbp
+  result[0] = 0xC9 # Leave
 
 func toHex(bytes: openarray[byte]): string =
   const hexChars = "0123456789abcdef"
@@ -255,13 +282,14 @@ proc main() =
   #      this will be stored in the JIT part and so depends on the next steps
   #   3. storing the length of the string
   #   4. syscall
-  #   5. return from syscall
-  #   6. "Hello, World!"
+  #   5. Restoring registers for the caller
+  #   6. return from syscall
+  #   7. "Hello, World!"
 
   # 1.2. Hello world length and location offset
   let instr_hello_len = mov(rdx, HelloWorld.len)
-  #      Offset is equal to length of instructions of step 3, 4, 5
-  let instr_hello_ptr = lea(rsi, rip, instr_hello_len.len + syscall().len + ret().len)
+  #      Offset is equal to length of instructions of step 3, 4 + restoring the 4 registers (5) + 6
+  let instr_hello_ptr = lea(rsi, rip, instr_hello_len.len + syscall().len + 4 + ret().len)
 
   # 1.3. Storing the instructions
   let p = cast[ptr UncheckedArray[byte]](jitmem.memaddr)
@@ -272,10 +300,24 @@ proc main() =
       p[pos] = instr[i]
       inc pos
 
-  p.write_instr(pos, instr_write_func)
-  p.write_instr(pos, instr_hello_ptr)
-  p.write_instr(pos, instr_hello_len)
-  p.write_instr(pos, syscall())
+  # We are clobbering registers RAX, RDX an RSI
+  # So we need to save (push) and restore (pop) them
+
+  p.write_instr(pos, push(rax))
+  p.write_instr(pos, push(rdi))
+  p.write_instr(pos, push(rdx))
+  p.write_instr(pos, push(rsi))
+
+  p.write_instr(pos, instr_write_func) # rax = write syscall
+  p.write_instr(pos, mov(rdi, 0x01))   # rdi = stdout (stdout file descriptor = 0x01)
+  p.write_instr(pos, instr_hello_ptr)  # rsi = ptr to HelloWorld
+  p.write_instr(pos, instr_hello_len)  # rdx = HelloWorld.len
+  p.write_instr(pos, syscall())        # os_write(rdi, rsi, rdx)
+
+  p.write_instr(pos, pop(rsi))
+  p.write_instr(pos, pop(rdx))
+  p.write_instr(pos, pop(rdi))
+  p.write_instr(pos, pop(rax))
   p.write_instr(pos, ret())
   p.write_instr(pos, HelloWorld)
 
@@ -283,10 +325,12 @@ proc main() =
   # 3. Sanity check
 
   echo "\n## JIT code expected"
+  echo pushStackFrame().toHex
   echo instr_write_func.toHex
   echo instr_hello_ptr.toHex
   echo instr_hello_len.toHex
   echo syscall().toHex
+  echo popStackFrame().toHex
   echo ret().toHex
   echo HelloWorld.toHex
 
@@ -303,10 +347,8 @@ proc main() =
   # 3. Execution
   let hello_jit = cast[proc(){.cdecl.}](jitmem.memaddr)
   echo "\n## JIT result"
-  for i in 0 ..< 2: # Why do I need 2 JIT call?
-    hello_jit()
+  hello_jit()
   echo '\n'
-
 
 when isMainModule:
   main()
