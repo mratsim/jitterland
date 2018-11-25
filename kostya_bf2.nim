@@ -1,3 +1,5 @@
+# Source: https://github.com/kostya/benchmarks/blob/master/brainfuck2/bf.nim
+
 import tables
 import sequtils
 import os

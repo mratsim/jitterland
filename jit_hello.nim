@@ -1,7 +1,9 @@
 # License Apache v2
-# Copyright Mamy André-Ratsimbazafy 2018
+# Copyright 2018, Mamy André-Ratsimbazafy
 
 # ########################################################
+
+# Self-contained Hello World using a JIT
 
 # For now only working on POSIX
 # for windows use VirtualAlloc, VirtualProtect, VirtualFree
