@@ -1,12 +1,5 @@
-# Array concatenation
-
-func `&`*[N1, N2: static[int], T](
-    a: array[N1, T],
-    b: array[N2, T]
-    ): array[N1 + N2, T] {.inline, noInit.}=
-  ## Array concatenation
-  result[0 ..< N1] = a
-  result[N1 ..< result.len] = b
+# License Apache v2
+# Copyright Mamy André-Ratsimbazafy 2018
 
 # ########################################################
 
@@ -246,18 +239,6 @@ func push(reg: static range[rax..rdi]): array[1, byte] =
 func pop(reg: static range[rax..rdi]): array[1, byte] =
   ## Pop the stack into a register
   result[0] = 0x58.byte or reg.byte
-
-func pushStackFrame(): array[4, byte] =
-  result[0]      = push(rbp)[0]
-  result[1 .. 3] = mov(rbp, rsp)
-
-func popStackFrame(): array[1, byte] =
-  # TODO optimization if rsp == rbp
-  # Leave is equivalent to (Intel syntax - mov dst, src)
-  # - mov rbp, rsp
-  # - pop rbp
-  # If rsp == rbp, we can just pop rbp
-  result[0] = 0xC9 # Leave
 
 func toHex(bytes: openarray[byte]): string =
   const hexChars = "0123456789abcdef"
