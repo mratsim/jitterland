@@ -110,7 +110,7 @@ proc `=destroy`[P: static set[MemProt]](jitmem: var JitMem[P]) =
 
 type Reg = enum
   # AX in 16-bit, EAX in 32-bit, RAX in 64-bit
-  # Registers are general purposes but some have specific euse
+  # Registers are general purposes but some have specific uses for some instructions
   # Special use of registers: https://stackoverflow.com/questions/36529449/why-are-rbp-and-rsp-called-general-purpose-registers/51347294#51347294
   rAX = 0b0_000  # Accumulator
   rCX = 0b0_001  # Loop counter
@@ -125,7 +125,7 @@ type Reg = enum
   r10 = 0b1_010
   r11 = 0b1_011
   r12 = 0b1_100  # In ModRM this triggers SIB addressing
-  r13 = 0b1_101  # In ModRM this triggers RIP addressing (instruction pointer relative) if mod = 0b00
+  r13 = 0b1_101  # In ModRM on x86_64, this triggers RIP addressing (instruction pointer relative) if mod = 0b00
   r14 = 0b1_110
   r15 = 0b1_111
 
@@ -167,6 +167,7 @@ func rex_prefix(w, r, x, b: static bool): byte =
 #     Important:
 #       - using RSP or R12 (stack pointer register), will use SIB instead of RM
 #       - using 0b00 + RBP or R13 (stack base pointer register), will use RIP+disp32 instead of RM
+#         RIP addressing is only valid on x86_64
 #     for addressing mode purposes
 #   - Reg - 3-bit: register reference. Can be extended to 4 bits.
 #   - RM  - 3-bit: register operand or indirect register operand. Can be extended to 4 bits.
@@ -182,20 +183,20 @@ type AddressingMode = enum
   Indirect_disp32 = 0b10
   Direct          = 0b11
 
-func modrm(adr_mode: AddressingMode, reg_rm: Reg, b: static bool): byte =
+func modrm(adr_mode: AddressingMode, rm: Reg, b: static bool): byte =
   when not b: # Only keep the last 3-bit if not extended
-    let reg_rm = reg_rm.byte and 0b111
+    let rm = rm.byte and 0b111
   result =           adr_mode.byte shl 6
-  result = result or   reg_rm.byte
+  result = result or       rm.byte
 
-func modrm(adr_mode: AddressingMode, reg_ref: Reg, r: static bool, reg_rm: Reg, b: static bool): byte =
+func modrm(adr_mode: AddressingMode, reg: Reg, r: static bool, rm: Reg, b: static bool): byte =
   when not r: # Only keep the last 3-bit if not extended
-    let reg_ref = reg_ref.byte and 0b111
+    let reg = reg.byte and 0b111
   when not b:
-    let reg_rm = reg_rm.byte and 0b111
+    let rm = rm.byte and 0b111
   result =           adr_mode.byte shl 6
-  result = result or  reg_ref.byte shl 3
-  result = result or   reg_rm.byte
+  result = result or      reg.byte shl 3
+  result = result or       rm.byte
 
 # SIB (Scale-Index-Base)
 #   Used in indirect addressing with displacement
@@ -210,19 +211,25 @@ func modrm(adr_mode: AddressingMode, reg_ref: Reg, r: static bool, reg_rm: Reg, 
 
 func mov(reg: static range[rax..rdi], imm32: uint32): array[6, byte] =
   ## Move immediate 32-bit value into register
-  result[0]       = 0xC7
+  # Note: we don't define imm16 moves as:
+  #  - It only saves one byte as we would need the 0x66 16-bit mode prefix
+  #  - Partial register loads are slower and causes stalls (https://stackoverflow.com/questions/41573502/why-doesnt-gcc-use-partial-registers)
+  result[0]       = 0xC7 # Move imm16 or imm32 into r/m16 or r/m32
   result[1]       = modrm(Direct, reg, false)
   result[2 ..< 6] = cast[array[4, byte]](imm32) # We assume that imm32 is little-endian as we are jitting on x86
 
 func mov(dst, src: static range[rax..rdi]): array[3, byte] =
   ## Move 64-bit content from register to register
   result[0] = rex_prefix(w = true, r = false, x = false, b = false)
-  result[1] = 0x89
+  result[1] = 0x89 # Move reg16 or reg32 int r/m16 or r/m32. Need REX pefix for 64-bit mode.
   result[2] = modrm(Direct, src, false, dst, false)
 
 func lea(dst: static range[rax..rdi], src: static InstructionPointer, disp32: uint32): array[7, byte] =
   ## Load an effective address relative to the instruction pointer
   ## Effective address = Current instruction + 32-bit displacement
+  static: assert defined(amd64), "RIP-relative addressing is only available on x86_64"
+  # Even though its 64-bit only, if REX is not set and rip >= 2^32
+  # only rip mod 2^32 will be loaded in the register,ed the extra byte for rex_prefix
   result[0]       = rex_prefix(w = true, r = false, x = false, b = false)
   result[1]       = 0x8D
   result[2]       = modrm(Indirect, dst, false, rbp, false) # To use rip, modrm requires passing "Indirect" (0b00) + RBP
@@ -311,7 +318,7 @@ proc main() =
   p.write_instr(pos, mov(rdi, 0x01))   # rdi = stdout (stdout file descriptor = 0x01)
   p.write_instr(pos, instr_hello_ptr)  # rsi = ptr to HelloWorld
   p.write_instr(pos, instr_hello_len)  # rdx = HelloWorld.len
-  p.write_instr(pos, syscall())        # os_write(rdi, rsi, rdx)
+  p.write_instr(pos, syscall())        # os.write(rdi, rsi, rdx) // os.write(file_descriptor, str_pointer, str_length)
 
   p.write_instr(pos, pop(rsi))
   p.write_instr(pos, pop(rdx))
@@ -324,12 +331,19 @@ proc main() =
   # 3. Sanity check
 
   echo "\n## JIT code expected"
-  echo pushStackFrame().toHex
+  echo push(rax).toHex
+  echo push(rdi).toHex
+  echo push(rdx).toHex
+  echo push(rsi).toHex
   echo instr_write_func.toHex
+  echo mov(rdi, 0x01).toHex
   echo instr_hello_ptr.toHex
   echo instr_hello_len.toHex
   echo syscall().toHex
-  echo popStackFrame().toHex
+  echo push(rsi).toHex
+  echo push(rdx).toHex
+  echo push(rdi).toHex
+  echo push(rax).toHex
   echo ret().toHex
   echo HelloWorld.toHex
 
