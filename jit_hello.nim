@@ -1,5 +1,17 @@
+# Array concatenation
+
+func `&`*[N1, N2: static[int], T](
+    a: array[N1, T],
+    b: array[N2, T]
+    ): array[N1 + N2, T] {.inline, noInit.}=
+  ## Array concatenation
+  result[0 ..< N1] = a
+  result[N1 ..< result.len] = b
+
+# ########################################################
+
 # For now only working on POSIX
-# for windows use VirtualAlloc, VirtualProtect, VrtualFree
+# for windows use VirtualAlloc, VirtualProtect, VirtualFree
 
 # See - https://github.com/nim-lang/Nim/blob/devel/lib/system/osalloc.nix
 const PageSize = 4096
@@ -59,7 +71,6 @@ when not defined(release):
     assert ord(MapAnonymous) == DebugMapAnonymous, "Your CPU+OS platform is misconfigured"
     echo "MemMapping constants success"
 
-
 proc mmap(
     adr: pointer, len: int,
     prot: Flag[MemProt], flags: Flag[MemMap],
@@ -99,23 +110,27 @@ proc `=destroy`[P: static set[MemProt]](jitmem: var JitMem[P]) =
 
 type Reg = enum
   # AX in 16-bit, EAX in 32-bit, RAX in 64-bit
+  # Registers are general purposes but some have specific euse
   # Special use of registers: https://stackoverflow.com/questions/36529449/why-are-rbp-and-rsp-called-general-purpose-registers/51347294#51347294
-  rax = 0b0_000
-  rcx = 0b0_001
-  rdx = 0b0_010
-  rbx = 0b0_011
-  rsp = 0b0_100  # Stack pointer
-  rbp = 0b0_101
-  rsi = 0b0_110
-  rdi = 0b0_111
+  rAX = 0b0_000  # Accumulator
+  rCX = 0b0_001  # Loop counter
+  rDX = 0b0_010  # Extend accumulator precision
+  rBX = 0b0_011  # Array index
+  rSP = 0b0_100  # Stack pointer                            - In ModRM this triggers SIB addressing
+  rBP = 0b0_101  # Stack base pointer (stack frame address) - In ModRM this triggers RIP addressing (instruction pointer relative) if mod = 0b00
+  rSI = 0b0_110  # Source index for string operations
+  rDI = 0b0_111  # Destination index for string operations
   r8  = 0b1_000
   r9  = 0b1_001
   r10 = 0b1_010
   r11 = 0b1_011
-  r12 = 0b1_100
-  r13 = 0b1_101
+  r12 = 0b1_100  # In ModRM this triggers SIB addressing
+  r13 = 0b1_101  # In ModRM this triggers RIP addressing (instruction pointer relative) if mod = 0b00
   r14 = 0b1_110
   r15 = 0b1_111
+
+type InstructionPointer = object # Instruction pointer
+const rIP = InstructionPointer()
 
 # Sources:
 #    - https://www-user.tu-chemnitz.de/~heha/viewchm.php/hs/x86.chm/x64.htm
@@ -135,7 +150,6 @@ func rex_prefix(w, r, x, b: static bool): byte =
   ## r: if true: extend ModRM.reg from 3-bit to 4-bit
   ## x: if true: extend SIB.index (Scale-Index-Base)
   ## b: if true: extend ModRM.rm from 3-bit to 4-bit
-
   result = 0b0100 shl 4
   result = result or (w.byte shl 3)
   result = result or (r.byte shl 2)
@@ -150,7 +164,9 @@ func rex_prefix(w, r, x, b: static bool): byte =
 #                    - 0b00 - RM
 #                    - 0b01 - RM + 1-byte displacement
 #                    - 0b10 - RM + 4-byte displacement
-#     Important, using RSP or R12 (stack pointer regs), will use SIB instead of RM
+#     Important:
+#       - using RSP or R12 (stack pointer register), will use SIB instead of RM
+#       - using 0b00 + RBP or R13 (stack base pointer register), will use RIP+disp32 instead of RM
 #     for addressing mode purposes
 #   - Reg - 3-bit: register reference. Can be extended to 4 bits.
 #   - RM  - 3-bit: register operand or indirect register operand. Can be extended to 4 bits.
@@ -166,13 +182,13 @@ type AddressingMode = enum
   Indirect_disp32 = 0b10
   Direct          = 0b11
 
-proc modrm(adr_mode: AddressingMode, reg_rm: Reg, b: static bool): byte =
+func modrm(adr_mode: AddressingMode, reg_rm: Reg, b: static bool): byte =
   when not b: # Only keep the last 3-bit if not extended
     let reg_rm = reg_rm.byte and 0b111
   result =           adr_mode.byte shl 6
   result = result or   reg_rm.byte
 
-proc modrm(adr_mode: AddressingMode, reg_ref: Reg, r: static bool, reg_rm: Reg, b: static bool): byte =
+func modrm(adr_mode: AddressingMode, reg_ref: Reg, r: static bool, reg_rm: Reg, b: static bool): byte =
   when not r: # Only keep the last 3-bit if not extended
     let reg_ref = reg_ref.byte and 0b111
   when not b:
@@ -192,14 +208,25 @@ proc modrm(adr_mode: AddressingMode, reg_ref: Reg, r: static bool, reg_rm: Reg, 
 # | scale |   index   |    base   |
 # +---+---+---+---+---+---+---+---+
 
-proc mov(reg: range[rax..rdi], imm32: uint32): array[7, byte] =
+func mov(reg: static range[rax..rdi], imm32: uint32): array[7, byte] =
   ## Move immediate 32-bit value into register
-  result[0]       = rex_prefix(w = true, r = false, x = true, b = false)
+  result[0]       = rex_prefix(w = true, r = false, x = false, b = false)
   result[1]       = 0xC7
   result[2]       = modrm(Direct, reg, false)
   result[3 ..< 7] = cast[array[4, byte]](imm32) # We assume that imm32 is little-endian as we are jitting on x86
 
-proc toHex(bytes: openarray[byte]): string =
+func lea(dst: static range[rax..rdi], src: static InstructionPointer, disp32: uint32): array[7, byte] =
+  ## Load an effective address relative to the instruction pointer
+  ## Effective address = Current instruction + 32-bit displacement
+  result[0]       = rex_prefix(w = true, r = false, x = false, b = false)
+  result[1]       = 0x8D
+  result[2]       = modrm(Indirect, dst, false, rbp, false) # To use rip, modrm requires passing "Indirect" (0b00) + RBP
+  result[3 ..< 7] = cast[array[4, byte]](disp32)            # We assume that imm32 is little-endian as we are jitting on x86
+
+func syscall(): array[2, byte] = [byte 0x0f, 0x05]
+func ret(): array[1, byte] = [byte 0xc3]
+
+func toHex(bytes: openarray[byte]): string =
   const hexChars = "0123456789abcdef"
 
   result = newString(3 * bytes.len)
@@ -208,9 +235,79 @@ proc toHex(bytes: openarray[byte]): string =
     result[3*i+1] = hexChars[int bytes[i]       and 0xF]
     result[3*i+2] = ' '
 
-when isMainModule:
-  let a = allocJitMem()
-  echo a.repr
+import sequtils, os
+proc main() =
+  const HelloWorld = mapLiterals(['H','e','l','l','o',' ','W','o','r','l','d','!'], byte)
+  let jitmem = allocJitMem()
+  defer: munmap(jitmem.memaddr, jitmem.len)
 
-  echo mov(rax, 1).toHex
-  echo mov(rdi, 1).toHex
+  ##############################################
+  # 1. Writing the instruction to the JIT memory
+  # 1.1. The OS "write" system call
+  when defined(linux):
+    let instr_write_func = mov(rax, 0x01)
+  elif defined(osx):
+    let instr_write_func = mov(rax, 0x02000004)
+
+  # Ordering:
+  #   1. storing write system call address
+  #   2. storing the location of the string to write to stdout
+  #      this will be stored in the JIT part and so depends on the next steps
+  #   3. storing the length of the string
+  #   4. syscall
+  #   5. return from syscall
+  #   6. "Hello, World!"
+
+  # 1.2. Hello world length and location offset
+  let instr_hello_len = mov(rdx, HelloWorld.len)
+  #      Offset is equal to length of instructions of step 3, 4, 5
+  let instr_hello_ptr = lea(rsi, rip, instr_hello_len.len + syscall().len + ret().len)
+
+  # 1.3. Storing the instructions
+  let p = cast[ptr UncheckedArray[byte]](jitmem.memaddr)
+  var pos = 0
+
+  proc write_instr[N: static int](p: ptr UncheckedArray[byte], pos: var int, instr: array[N, byte]) {.sideeffect.} =
+    for i in 0 ..< N:
+      p[pos] = instr[i]
+      inc pos
+
+  p.write_instr(pos, instr_write_func)
+  p.write_instr(pos, instr_hello_ptr)
+  p.write_instr(pos, instr_hello_len)
+  p.write_instr(pos, syscall())
+  p.write_instr(pos, ret())
+  p.write_instr(pos, HelloWorld)
+
+  #####################################################
+  # 3. Sanity check
+
+  echo "\n## JIT code expected"
+  echo instr_write_func.toHex
+  echo instr_hello_ptr.toHex
+  echo instr_hello_len.toHex
+  echo syscall().toHex
+  echo ret().toHex
+  echo HelloWorld.toHex
+
+  echo "\n## JIT code stored"
+  for i in 0 ..< pos:
+    stdout.write [p[i]].toHex
+  echo ""
+
+  #####################################################
+  # 2. Changing permission from Read/Write to Read/Exec
+  mprotect(jitmem.memaddr, jitmem.len, flag(ProtRead, ProtExec))
+
+  #####################################################
+  # 3. Execution
+  let hello_jit = cast[proc(){.cdecl.}](jitmem.memaddr)
+  echo "\n## JIT result"
+  for i in 0 ..< 2: # Why do I need 2 JIT call?
+    hello_jit()
+  echo '\n'
+
+
+when isMainModule:
+  main()
+
