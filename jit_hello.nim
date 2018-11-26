@@ -8,7 +8,7 @@
 # For now only working on POSIX
 # for windows use VirtualAlloc, VirtualProtect, VirtualFree
 
-# See - https://github.com/nim-lang/Nim/blob/devel/lib/system/osalloc.nix
+# See - https://github.com/nim-lang/Nim/blob/devel/lib/system/osalloc.nim
 const PageSize = 4096
 
 when not defined(posix):
