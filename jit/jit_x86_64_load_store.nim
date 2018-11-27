@@ -6,11 +6,13 @@ import
 
 func mov*(a: var Assembler[Reg_X86_64], reg: static range[rax..rdi], imm32: uint32) {.inline.} =
   ## Move immediate 32-bit value into register
-  a.code.add [
-    byte 0xC7, # Move imm to r/m
-    modrm(Direct, reg, false)
-  ]
+  a.code.add static(0xB8.byte + reg.byte) # Move imm to r
   a.code.add cast[array[4, byte]](imm32)
+
+func mov*(a: var Assembler[Reg_X86_64], reg: static range[rax..rdi], imm64: uint64) {.inline.} =
+  ## Move immediate 64-bit value into register
+  a.code.add static(0xB8.byte + reg.byte) # Move imm to r
+  a.code.add cast[array[8, byte]](imm64)
 
 func mov*(a: var Assembler[Reg_X86_64], dst, src: static range[rax..rdi]) =
   ## Copy 64-bit register content to another register
