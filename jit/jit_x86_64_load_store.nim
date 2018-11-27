@@ -9,27 +9,29 @@ func mov*(a: var Assembler[Reg_X86_64], reg: static range[rax..rdi], imm32: uint
   a.code.add static(0xB8.byte + reg.byte) # Move imm to r
   a.code.add cast[array[4, byte]](imm32)
 
-func mov*(a: var Assembler[Reg_X86_64], reg: static range[rax..rdi], imm64: uint64) {.inline.} =
-  ## Move immediate 64-bit value into register
-  a.code.add static(0xB8.byte + reg.byte) # Move imm to r
+func mov*(a: var Assembler[Reg_X86_64], reg: static range[rax..rdi], imm64: pointer) {.inline.} =
+  ## Move immediate 64-bit pointer value into register
+  a.code.add [
+    rex_prefix(w = 1),
+    static(0xB8.byte + reg.byte) # Move imm to r
+  ]
   a.code.add cast[array[8, byte]](imm64)
 
 func mov*(a: var Assembler[Reg_X86_64], dst, src: static range[rax..rdi]) =
   ## Copy 64-bit register content to another register
   a.code.add [
-    rex_prefix(w = true, r = false, x = false, b = false),
+    rex_prefix(w = 1),
     0x89, # Move reg to r/m
-    modrm(Direct, reg = src, false, rm = dst, false)
+    modrm(Direct, reg = src, rm = dst)
   ]
 
 func lea*(a: var Assembler[Reg_X86_64], reg: static range[rax..rdi], label: static Label) {.inline.} =
   ## Load effective Address of the target label into a register
   # We use RIP-relative addressing. This is x86_64 only and does not exist on x86.
-
   a.code.add [
-    rex_prefix(w = true, r = false, x = false, b = false),
+    rex_prefix(w = 1),
     0x8D, # Move reg to r/m
-    modrm(Indirect, reg = reg, false, rm = rbp, false), # RBP triggers rip-relative addressing.
+    modrm(Indirect, reg = reg, rm = rbp), # RBP triggers rip-relative addressing.
     0x00, 0x00, 0x00, 0x00 # Placeholder for target label
   ]
   a.add_target label

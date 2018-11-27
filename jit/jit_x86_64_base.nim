@@ -54,17 +54,17 @@ const rIP* = InstructionPointer()
 # Displacement: 0, 1, 2, 4      byte(s)
 # Immediate:    0, 1, 2, 4 or 8 byte(s)
 
-func rex_prefix*(w, r, x, b: bool): byte {.compileTime.}=
+func rex_prefix*(w, r, x, b: range[0..1] = 0): byte {.compileTime.}=
   ## w: true if a 64-bit operand size is used,
   ##    otherwise 0 for default operand size (usually 32 but some are 64-bit default)
-  ## r: if true: extend ModRM.reg from 3-bit to 4-bit
-  ## x: if true: extend SIB.index (Scale-Index-Base)
-  ## b: if true: extend ModRM.rm from 3-bit to 4-bit
+  ## r: ModRM.reg = r.XXX i.e switch between rax 0.000 and r8 1.000
+  ## x: SIB.index = x.XXX i.e. switch between rax 0.000 and r8 1.000
+  ## b: ModRM.rm = b.XXX i.e. switch between rax 0.000 and r8 1.000
   result = 0b0100 shl 4
   result = result or (w.byte shl 3)
   result = result or (r.byte shl 2)
   result = result or (x.byte shl 1)
-  result = result or (b.byte)
+  result = result or b.byte
 
 # ModRM (Mode-Register-Memory)
 #   - Mod - 2-bit: addressing mode:
@@ -93,22 +93,22 @@ type AddressingMode_X86_64* = enum
 
 func modrm*(
       adr_mode: AddressingMode_X86_64,
-      rm: Reg_X86_64, b: bool
+      opcode_extension: range[0..15],
+      rm: Reg_X86_64
     ): byte {.compileTime.}=
-  if not b: # Only keep the last 3-bit if not extended
-    let rm = rm.byte and 0b111
-  result =           adr_mode.byte shl 6
-  result = result or       rm.byte
+  let # Use complementary REX prefix to address the upper registers
+    rm = rm.byte and 0b111
+  result =         adr_mode.byte shl 6
+  result = opcode_extension.byte shl 3
+  result = result or     rm
 
 func modrm*(
       adr_mode: AddressingMode_X86_64,
-      reg: Reg_X86_64, r: bool,
-      rm: Reg_X86_64, b: bool
+      reg, rm: Reg_X86_64
     ): byte {.compileTime.}=
-  if not r: # Only keep the last 3-bit if not extended
-    let reg = reg.byte and 0b111
-  if not b:
-    let rm = rm.byte and 0b111
+  let # Use complementary REX prefix to address the upper registers
+    reg = reg.byte and 0b111
+    rm = rm.byte and 0b111
   result =           adr_mode.byte shl 6
   result = result or      reg.byte shl 3
   result = result or       rm.byte
@@ -130,19 +130,37 @@ func modrm*(
 #
 # ############################################################
 
-func push(reg: range[rax..rdi]): byte {.compileTime.}=
+func push*(reg: range[rax..rdi]): byte {.compileTime.}=
   ## Push a register on the stack
   result = 0x50.byte or reg.byte
 
-func pop(reg: range[rax..rdi]): byte {.compileTime.}=
+func pop*(reg: range[rax..rdi]): byte {.compileTime.}=
   ## Pop the stack into a register
   result = 0x58.byte or reg.byte
+
+func push_ext*(reg: range[r8..r15]): array[2, byte] {.compileTime.}=
+  ## Push an extended register on the stack
+  result = [
+      rex_prefix(b = 1),
+      0x50.byte or (reg.byte and 0b111)
+    ]
+
+func pop_ext*(reg: range[r8..r15]): array[2, byte] {.compileTime.}=
+  ## Pop the stack into an extended register
+  result = [
+      rex_prefix(b = 1),
+      0x58.byte or (reg.byte and 0b111)
+    ]
 
 func saveRestoreRegs(dr: var DirtyRegs[Reg_X86_64]) {.compileTime.}=
   ## Generate the code to save and restore clobbered registers
   for reg in dr.clobbered_regs:
-    dr.save_regs.add push(reg)
-    dr.restore_regs.add pop(reg)
+    if reg in rax..rdi:
+      dr.save_regs.add push(reg)
+      dr.restore_regs.add pop(reg)
+    else:
+      dr.save_regs.add push_ext(reg)
+      dr.restore_regs.add pop_ext(reg)
 
 # ############################################################
 #
