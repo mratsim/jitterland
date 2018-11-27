@@ -42,9 +42,9 @@ else: # ASM-Generic
     MapPrivate = 0x02
     MapAnonymous = 0x20
 
-type Flag[E: enum] = distinct cint
+type Flag*[E: enum] = distinct cint
 
-func flag[E: enum](e: varargs[E]): Flag[E] {.inline.} =
+func flag*[E: enum](e: varargs[E]): Flag[E] {.inline.} =
   ## Enum should only have power of 2 fields
   # Unfortunately iterating on low(E)..high(E)
   # will also iterate on the holes
