@@ -150,8 +150,8 @@ func saveRestoreRegs(dr: var DirtyRegs[Reg_X86_64]) {.compileTime.}=
 #
 # ############################################################
 
-macro generate_x86_64*(
-        assembler_ident: untyped,
+macro gen_x86_64*(
+        assembler: untyped,
         body: untyped
       ): untyped =
   ## Initialise an Assembler for x86_64
@@ -183,23 +183,16 @@ macro generate_x86_64*(
     restoreRegs = newLit dirty_regs.restore_regs
 
   result.add quote do:
-    var `assembler_ident` = Assembler[Reg_X86_64](
-            code: `saveRegs`,
-            labels_use: initTable[Label, seq[CodePos]](),
-            code_restore_regs: `restoreRegs`
-    )
+    block:
+      var `assembler` = Assembler[Reg_X86_64](
+              code: `saveRegs`,
+              labels: initTable[Label, LabelInfo](),
+              code_restore_regs: `restoreRegs`
+      )
 
-  result.add body
+      `body`
 
-when isMainModule:
-  func mov(a: Assembler[Reg_X86_64], reg: static range[rax..rdi], imm32: uint32) =
-    discard
+      `assembler`.post_process()
 
-  func mov(a: Assembler[Reg_X86_64], dst, src: static range[rax..rdi]) =
-    discard
-
-  generate_x86_64(a):
-    a.mov(rax, 1)
-    a.mov(rax, rdi)
-
-    echo a
+      ## Returned expression
+      `assembler`.newJitFunction()
