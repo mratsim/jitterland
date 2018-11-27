@@ -2,7 +2,7 @@
 # Copyright 2018, Mamy André-Ratsimbazafy
 
 import jit_datatypes
-export JitFunction, Label, Assembler, call, hash, label
+export JitFunction, Assembler, call, hash, Label, tag, label
 
 import jit_x86_64_base
 export Reg_X86_64, gen_x86_64

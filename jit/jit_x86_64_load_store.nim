@@ -25,7 +25,7 @@ func mov*(a: var Assembler[Reg_X86_64], dst, src: static range[rax..rdi]) =
     modrm(Direct, reg = src, rm = dst)
   ]
 
-func lea*(a: var Assembler[Reg_X86_64], reg: static range[rax..rdi], label: static Label) {.inline.} =
+func lea*(a: var Assembler[Reg_X86_64], reg: static range[rax..rdi], label: Label) {.inline.} =
   ## Load effective Address of the target label into a register
   # We use RIP-relative addressing. This is x86_64 only and does not exist on x86.
   a.code.add [

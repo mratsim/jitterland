@@ -13,7 +13,7 @@ proc main() =
 
   let fn = gen_x86_64(assembler = a, clean_registers = true):
     # Initialize a label placeholder for the HelloWorld string data
-    const L1 = Label()
+    let L1 = label()
 
     # "write" syscall
     # rax = write syscall (0x01 on Linux, 0x02000004 on OSX)
@@ -33,7 +33,7 @@ proc main() =
     a.mov rdx, HelloWorld.len
     a.syscall()
     a.ret()
-    a.label L1
+    a.tag L1
     a.embed_raw_bytes HelloWorld
 
   fn.call()

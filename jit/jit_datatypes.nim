@@ -3,7 +3,7 @@
 
 import
   ./jit_osalloc, ./jit_utils,
-  hashes, tables, macros
+  hashes, tables, macros, random
 
 type
   JitFunction* = ref object
@@ -11,6 +11,9 @@ type
     len:     int
 
   Label* = object
+    ## Label for a jump or effective addressing opcodes
+    ## Always initialise a label with the `label()` proc
+    id: int
   ByteCode* = seq[byte]
   CodePos* = int
 
@@ -105,16 +108,26 @@ proc searchClobberedRegs*[R: enum](dr: var DirtyRegs[R], ast: NimNode) =
 #
 # ############################################################
 
-macro hash*(l: Label): Hash =
-  ## We stringified and hash the ident
-  ## to use as hash table key
-  hash($l)
+var label_rng = initRand(0x1337DEADBEEF)
 
-func label*(a: var Assembler, l: static Label) {.inline.}=
+proc label*(): Label =
+  ## Create a new unique label.
+  ## Label IDs are assigned at runtime and are unique
+  ## even in loops like
+  ## ```
+  ## for _ in 0 ..< 10:
+  ##   let L1 = label()
+  ## ```
+  result.id = label_rng.rand(high(int))
+
+template hash*(l: Label): Hash =
+  Hash(l.id)
+
+func tag*(a: var Assembler, l: Label) {.inline.}=
   ## Tag the current location as a jump/effective address target
   a.labels.mgetOrPut(l, LabelInfo()).pos = a.code.len
 
-func add_target*(a: var Assembler, l: static Label) {.inline.}=
+func add_target*(a: var Assembler, l: Label) {.inline.}=
   ## Add a target label at the current code
   ## 4-byte placeholder should be left to
   ## be overwritten during post-processing
