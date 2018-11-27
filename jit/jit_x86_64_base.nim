@@ -39,8 +39,8 @@ type
 #
 # ############################################################
 
-type InstructionPointer = object # Instruction pointer
-const rIP = InstructionPointer()
+type InstructionPointer* = object # Instruction pointer
+const rIP* = InstructionPointer()
 
 # Sources:
 #    - https://www-user.tu-chemnitz.de/~heha/viewchm.php/hs/x86.chm/x64.htm
@@ -54,7 +54,7 @@ const rIP = InstructionPointer()
 # Displacement: 0, 1, 2, 4      byte(s)
 # Immediate:    0, 1, 2, 4 or 8 byte(s)
 
-func rex_prefix*(w, r, x, b: static bool): byte {.compileTime.}=
+func rex_prefix*(w, r, x, b: bool): byte {.compileTime.}=
   ## w: true if a 64-bit operand size is used,
   ##    otherwise 0 for default operand size (usually 32 but some are 64-bit default)
   ## r: if true: extend ModRM.reg from 3-bit to 4-bit
@@ -85,29 +85,29 @@ func rex_prefix*(w, r, x, b: static bool): byte {.compileTime.}=
 # |  mod  |    reg    |     rm    |
 # +---+---+---+---+---+---+---+---+
 
-type AddressingMode_X86_64 = enum
+type AddressingMode_X86_64* = enum
   Indirect        = 0b00
   Indirect_disp8  = 0b01
   Indirect_disp32 = 0b10
   Direct          = 0b11
 
-func modrm(
-      adr_mode: static AddressingMode_X86_64,
-      rm: static Reg_X86_64, b: static bool
+func modrm*(
+      adr_mode: AddressingMode_X86_64,
+      rm: Reg_X86_64, b: bool
     ): byte {.compileTime.}=
-  when not b: # Only keep the last 3-bit if not extended
+  if not b: # Only keep the last 3-bit if not extended
     let rm = rm.byte and 0b111
   result =           adr_mode.byte shl 6
   result = result or       rm.byte
 
-func modrm(
-      adr_mode: static AddressingMode_X86_64,
-      reg: static Reg_X86_64, r: static bool,
-      rm: static Reg_X86_64, b: static bool
+func modrm*(
+      adr_mode: AddressingMode_X86_64,
+      reg: Reg_X86_64, r: bool,
+      rm: Reg_X86_64, b: bool
     ): byte {.compileTime.}=
-  when not r: # Only keep the last 3-bit if not extended
+  if not r: # Only keep the last 3-bit if not extended
     let reg = reg.byte and 0b111
-  when not b:
+  if not b:
     let rm = rm.byte and 0b111
   result =           adr_mode.byte shl 6
   result = result or      reg.byte shl 3
@@ -152,8 +152,9 @@ func saveRestoreRegs(dr: var DirtyRegs[Reg_X86_64]) {.compileTime.}=
 
 macro gen_x86_64*(
         assembler: untyped,
+        clean_registers: static bool,
         body: untyped
-      ): untyped =
+      ): JitFunction =
   ## Initialise an Assembler for x86_64
   ## that will parse the code generation body and emit
   ## the corresponding code.
@@ -176,23 +177,32 @@ macro gen_x86_64*(
   dirty_regs.saveRestoreRegs()
 
   # Now initialize the assembler
-  result = newStmtList()
-
   let
     saveRegs = newLit dirty_regs.save_regs
     restoreRegs = newLit dirty_regs.restore_regs
 
-  result.add quote do:
-    block:
+  let asm_init = block:
+    if clean_registers:
+      let clean_regs = newLit clean_registers
+      quote do:
+        var `assembler` = Assembler[Reg_X86_64](
+                code: `saveRegs`,
+                labels: initTable[Label, LabelInfo](),
+                clean_regs: `clean_regs`,
+                restore_regs: `restoreRegs`
+        )
+    else: quote do:
       var `assembler` = Assembler[Reg_X86_64](
-              code: `saveRegs`,
               labels: initTable[Label, LabelInfo](),
-              code_restore_regs: `restoreRegs`
+              clean_regs: `clean_registers`
       )
 
-      `body`
-
-      `assembler`.post_process()
-
-      ## Returned expression
-      `assembler`.newJitFunction()
+  result = nnkBlockStmt.newTree(
+    newEmptyNode(),
+    nnkStmtList.newTree(
+      asm_init,
+      body,
+      newCall(bindSym"post_process", assembler),
+      newCall(bindSym"newJitFunction", assembler)
+    )
+  )
