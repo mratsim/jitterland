@@ -2,17 +2,19 @@
 # Copyright 2018, Mamy André-Ratsimbazafy
 
 import jit_datatypes
-export JitFunction, Assembler, call, hash, Label, tag, label
+export JitFunction, Assembler, call, hash, Label, initLabel, label
 
 import jit_x86_64_base
 export Reg_X86_64, gen_x86_64
 
 import
   jit_x86_64_call, jit_x86_64_load_store, jit_x86_64_raw_data,
-  jit_x86_64_scalar_arith, jit_x86_64_stack
+  jit_x86_64_scalar_arith, jit_x86_64_stack,
+  jit_x86_64_compare, jit_x86_64_jumps
 export
   jit_x86_64_call, jit_x86_64_load_store, jit_x86_64_raw_data,
-  jit_x86_64_scalar_arith, jit_x86_64_stack
+  jit_x86_64_scalar_arith, jit_x86_64_stack,
+  jit_x86_64_compare, jit_x86_64_jumps
 
 func toHex*(bytes: openarray[byte]): string =
   const hexChars = "0123456789abcdef"

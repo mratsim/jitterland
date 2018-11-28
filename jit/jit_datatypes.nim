@@ -110,21 +110,22 @@ proc searchClobberedRegs*[R: enum](dr: var DirtyRegs[R], ast: NimNode) =
 
 var label_rng = initRand(0x1337DEADBEEF)
 
-proc label*(): Label =
+proc initLabel*(): Label =
   ## Create a new unique label.
   ## Label IDs are assigned at runtime and are unique
   ## even in loops like
   ## ```
   ## for _ in 0 ..< 10:
-  ##   let L1 = label()
+  ##   let L1 = initLabel()
   ## ```
   result.id = label_rng.rand(high(int))
 
 template hash*(l: Label): Hash =
   Hash(l.id)
 
-func tag*(a: var Assembler, l: Label) {.inline.}=
-  ## Tag the current location as a jump/effective address target
+func label*(a: var Assembler, l: Label) {.inline.}=
+  ## Mark the current location with a label
+  ## to set it as a jump or load effective address target
   a.labels.mgetOrPut(l, LabelInfo()).pos = a.code.len
 
 func add_target*(a: var Assembler, l: Label) {.inline.}=
