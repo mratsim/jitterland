@@ -9,11 +9,13 @@ func cmp*(a: var Assembler[Reg_X86_64], adr_reg: static array[1, Reg_X86_64], im
   when adr_reg[0] in rax .. rdi:
     a.code.add [
       byte 0x80,
-      modrm(Indirect, opcode_extension = 7, rm = adr_reg[0])
+      modrm(Indirect, opcode_ext = 7, rm = adr_reg[0]),
+      imm8
     ]
   else:
     a.code.add [
       rex_prefix(b = 1),
       byte 0x80,
-      modrm(Indirect, opcode_extension = 7, rm = adr_reg[0])
+      modrm(Indirect, opcode_ext = 7, rm = adr_reg[0]),
+      imm8
     ]

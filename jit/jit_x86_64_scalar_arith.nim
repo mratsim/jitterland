@@ -12,9 +12,9 @@ func inc*(
   ## Note that the Carry Flag is not updated
   ## in case of rollover
   a.code.add [
-    rex_prefix(w = 1, b = int(reg in r8..r15)),
+    rex_prefix(w = 1, b = static(int(reg in r8..r15))),
     0xFF,
-    modrm(Direct, opcode_extension = 0, rm = reg)
+    modrm(Direct, opcode_ext = 0, rm = reg)
   ]
 
 func dec*(
@@ -25,9 +25,9 @@ func dec*(
   ## Note that the Carry Flag is not updated
   ## in case of rollover
   a.code.add [
-    rex_prefix(w = 1, b = int(reg in r8..r15)),
+    rex_prefix(w = 1, b = static(int(reg in r8..r15))),
     0xFF,
-    modrm(Direct, opcode_extension = 1, rm = reg)
+    modrm(Direct, opcode_ext = 1, rm = reg)
   ]
 
 func inc*(
@@ -39,44 +39,44 @@ func inc*(
   ## in case of rollover
   when T is uint64:
     a.code.add [
-      rex_prefix(w = 1, b = int(adr_reg[0] in r8..r15)),
+      rex_prefix(w = 1, b = static(int(reg in r8..r15))),
       0xFF,
-      modrm(Indirect, opcode_extension = 0, rm = adr_reg[0])
+      modrm(Indirect, opcode_ext = 0, rm = adr_reg[0])
     ]
   elif T is uint32 and adr_reg[0] in rax .. rdi:
     a.code.add [
       byte 0xFF,
-      modrm(Indirect, opcode_extension = 0, rm = adr_reg[0])
+      modrm(Indirect, opcode_ext = 0, rm = adr_reg[0])
     ]
   elif T is uint32 and adr_reg[0] in r8 .. r15:
     a.code.add [
       rex_prefix(b = 1),
       0xFF,
-      modrm(Indirect, opcode_extension = 0, rm = adr_reg[0])
+      modrm(Indirect, opcode_ext = 0, rm = adr_reg[0])
     ]
   elif T is uint16 and adr_reg[0] in rax .. rdi:
     a.code.add [
       byte 0x66,
       0xFF,
-      modrm(Indirect, opcode_extension = 0, rm = adr_reg[0])
+      modrm(Indirect, opcode_ext = 0, rm = adr_reg[0])
     ]
   elif T is uint16 and adr_reg[0] in r8 .. r15:
     a.code.add [
       byte 0x66,
       rex_prefix(b = 1),
       0xFF,
-      modrm(Indirect, opcode_extension = 0, rm = adr_reg[0])
+      modrm(Indirect, opcode_ext = 0, rm = adr_reg[0])
     ]
   elif T is uint8 and adr_reg[0] in rax .. rdi:
     a.code.add [
       byte 0xFE,
-      modrm(Indirect, opcode_extension = 0, rm = adr_reg[0])
+      modrm(Indirect, opcode_ext = 0, rm = adr_reg[0])
     ]
   elif T is uint8 and adr_reg[0] in r8 .. r15:
     a.code.add [
       rex_prefix(b = 1),
       0xFE,
-      modrm(Indirect, opcode_extension = 0, rm = adr_reg[0])
+      modrm(Indirect, opcode_ext = 0, rm = adr_reg[0])
     ]
 
 func dec*(
@@ -88,42 +88,42 @@ func dec*(
   ## in case of rollover
   when T is uint64:
     a.code.add [
-      rex_prefix(w = 1, b = int(adr_reg[0] in r8..r15)),
+      rex_prefix(w = 1, b = static(int(reg in r8..r15))),
       0xFF,
-      modrm(Indirect, opcode_extension = 1, rm = adr_reg[0])
+      modrm(Indirect, opcode_ext = 1, rm = adr_reg[0])
     ]
   elif T is uint32 and adr_reg[0] in rax .. rdi:
     a.code.add [
       byte 0xFF,
-      modrm(Indirect, opcode_extension = 1, rm = adr_reg[0])
+      modrm(Indirect, opcode_ext = 1, rm = adr_reg[0])
     ]
   elif T is uint32 and adr_reg[0] in r8 .. r15:
     a.code.add [
       rex_prefix(b = 1),
       0xFF,
-      modrm(Indirect, opcode_extension = 1, rm = adr_reg[0])
+      modrm(Indirect, opcode_ext = 1, rm = adr_reg[0])
     ]
   elif T is uint16 and adr_reg[0] in rax .. rdi:
     a.code.add [
       byte 0x66,
       0xFF,
-      modrm(Indirect, opcode_extension = 1, rm = adr_reg[0])
+      modrm(Indirect, opcode_ext = 1, rm = adr_reg[0])
     ]
   elif T is uint16 and adr_reg[0] in r8 .. r15:
     a.code.add [
       byte 0x66,
       rex_prefix(b = 1),
       0xFF,
-      modrm(Indirect, opcode_extension = 1, rm = adr_reg[0])
+      modrm(Indirect, opcode_ext = 1, rm = adr_reg[0])
     ]
   elif T is uint8 and adr_reg[0] in rax .. rdi:
     a.code.add [
       byte 0xFE,
-      modrm(Indirect, opcode_extension = 1, rm = adr_reg[0])
+      modrm(Indirect, opcode_ext = 1, rm = adr_reg[0])
     ]
   elif T is uint8 and adr_reg[0] in r8 .. r15:
     a.code.add [
       rex_prefix(b = 1),
       0xFE,
-      modrm(Indirect, opcode_extension = 1, rm = adr_reg[0])
+      modrm(Indirect, opcode_ext = 1, rm = adr_reg[0])
     ]

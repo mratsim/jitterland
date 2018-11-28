@@ -78,6 +78,7 @@ func rex_prefix*(w, r, x, b: range[0..1] = 0): byte {.compileTime.}=
 #         RIP addressing is only valid on x86_64
 #     for addressing mode purposes
 #   - Reg - 3-bit: register reference. Can be extended to 4 bits.
+#     Reg is sometimes replaced by an "opcode extension", depending on the opcode.
 #   - RM  - 3-bit: register operand or indirect register operand. Can be extended to 4 bits.
 #
 #   7                           0
@@ -93,14 +94,14 @@ type AddressingMode_X86_64* = enum
 
 func modrm*(
       adr_mode: AddressingMode_X86_64,
-      opcode_extension: range[0..15],
+      opcode_ext: range[0..15],
       rm: Reg_X86_64
     ): byte {.compileTime.}=
   let # Use complementary REX prefix to address the upper registers
     rm = rm.byte and 0b111
-  result =         adr_mode.byte shl 6
-  result = opcode_extension.byte shl 3
-  result = result or     rm
+  result = adr_mode.byte shl 6
+  result = result or opcode_ext.byte shl 3
+  result = result or rm
 
 func modrm*(
       adr_mode: AddressingMode_X86_64,
@@ -109,9 +110,9 @@ func modrm*(
   let # Use complementary REX prefix to address the upper registers
     reg = reg.byte and 0b111
     rm = rm.byte and 0b111
-  result =           adr_mode.byte shl 6
-  result = result or      reg.byte shl 3
-  result = result or       rm.byte
+  result = adr_mode.byte shl 6
+  result = result or reg.byte shl 3
+  result = result or  rm.byte
 
 # SIB (Scale-Index-Base)
 #   Used in indirect addressing with displacement
