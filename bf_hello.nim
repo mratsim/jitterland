@@ -1,6 +1,6 @@
 # Brainfuck interpreter (and JITer?)
 
-import ./bfVM_v02
+import ./bfVM_v03_jit
 
 # Hello world
 let prog =  """
