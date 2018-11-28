@@ -45,7 +45,7 @@ func inc*(
     ]
   elif T is uint32 and adr_reg[0] in rax .. rdi:
     a.code.add [
-      0xFF,
+      byte 0xFF,
       modrm(Indirect, opcode_extension = 0, rm = adr_reg[0])
     ]
   elif T is uint32 and adr_reg[0] in r8 .. r15:
@@ -56,20 +56,20 @@ func inc*(
     ]
   elif T is uint16 and adr_reg[0] in rax .. rdi:
     a.code.add [
-      0x66,
+      byte 0x66,
       0xFF,
       modrm(Indirect, opcode_extension = 0, rm = adr_reg[0])
     ]
   elif T is uint16 and adr_reg[0] in r8 .. r15:
     a.code.add [
-      0x66,
+      byte 0x66,
       rex_prefix(b = 1),
       0xFF,
       modrm(Indirect, opcode_extension = 0, rm = adr_reg[0])
     ]
   elif T is uint8 and adr_reg[0] in rax .. rdi:
     a.code.add [
-      0xFE,
+      byte 0xFE,
       modrm(Indirect, opcode_extension = 0, rm = adr_reg[0])
     ]
   elif T is uint8 and adr_reg[0] in r8 .. r15:
@@ -94,7 +94,7 @@ func dec*(
     ]
   elif T is uint32 and adr_reg[0] in rax .. rdi:
     a.code.add [
-      0xFF,
+      byte 0xFF,
       modrm(Indirect, opcode_extension = 1, rm = adr_reg[0])
     ]
   elif T is uint32 and adr_reg[0] in r8 .. r15:
@@ -105,20 +105,20 @@ func dec*(
     ]
   elif T is uint16 and adr_reg[0] in rax .. rdi:
     a.code.add [
-      0x66,
+      byte 0x66,
       0xFF,
       modrm(Indirect, opcode_extension = 1, rm = adr_reg[0])
     ]
   elif T is uint16 and adr_reg[0] in r8 .. r15:
     a.code.add [
-      0x66,
+      byte 0x66,
       rex_prefix(b = 1),
       0xFF,
       modrm(Indirect, opcode_extension = 1, rm = adr_reg[0])
     ]
   elif T is uint8 and adr_reg[0] in rax .. rdi:
     a.code.add [
-      0xFE,
+      byte 0xFE,
       modrm(Indirect, opcode_extension = 1, rm = adr_reg[0])
     ]
   elif T is uint8 and adr_reg[0] in r8 .. r15:
