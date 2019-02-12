@@ -12,9 +12,9 @@ All the interpreters and JITs implement the [Brainfuck language](https://en.wiki
   - An interactive integer factorization program
   - The Brainfuck benchmark used by Kostya for [programming language benchmarks](https://github.com/kostya/benchmarks) which prints the alphabet in reverse order
 
-Available implementation:
+Available implementations:
   - [kostya_bf2.nim](kostya_bf2.nim) is the implementation from kostya's benchmark.
-    It is a pure interpreter that processe the Brainfuck program in a single pass.
+    It is a pure interpreter that processes the Brainfuck program in a single pass.
   - [bfVM_v01.nim](bfVM_v01.nim) implements a pure interpreter in 2 stages.
     - First lexing the program into an opcode stream,
     - Second executing with an optimized interpreter using computed gotos.
