@@ -24,7 +24,7 @@ Available implementation:
       Additionally jump targets will be precomputed and stored into a sequence with the
       same size as the opcode stream. If a jump can occur, the target byte offset will be stored in the sequence at the index of the current opcode.
     - Second executing with an optimized interpreter using computed gotos.
-  - [bfVM_v03.nim](bfVM_v03.nim) implements a written from scratch JIT for x86_64.
+  - [bfVM_v03_jit.nim](bfVM_v03_jit.nim) implements a written from scratch JIT for x86_64.
     - First the whole program is lexed and compiled to machine code without optimisation (no folding of multiple increments for example)
     - Second the machine code is run
 
